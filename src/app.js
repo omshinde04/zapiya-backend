@@ -22,6 +22,15 @@ import knowledgeRoutes from "./routes/knowledge.js";
 import chatRoutes from "./routes/chat.js";
 import greetRoutes from "./routes/greet.js";
 
+
+
+import path from "path";
+import { fileURLToPath } from "url";
+import fastifyStatic from "@fastify/static";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // =========================
 // CREATE APP
 // =========================
@@ -60,9 +69,6 @@ const waitForEmbedding = async () => {
 };
 
 // =========================
-// SECURITY & MIDDLEWARE
-// =========================
-// =========================
 // SECURITY & MIDDLEWARE (FINAL FIX)
 // =========================
 await app.register(cors, {
@@ -72,6 +78,13 @@ await app.register(cors, {
     credentials: true,
 });
 
+// =========================
+// STATIC FILES (WIDGET)
+// =========================
+await app.register(fastifyStatic, {
+    root: path.join(__dirname, "../public"),
+    prefix: "/", // so /widget.js works
+});
 
 await app.register(rateLimit, {
     max: 100,
@@ -106,6 +119,7 @@ await app.register(agentRoutes, { prefix: "/api/agents" });
 await app.register(chatRoutes, { prefix: "/api/chat" });
 await app.register(knowledgeRoutes, { prefix: "/api/knowledge" });
 await app.register(greetRoutes, { prefix: "/api/greet" });
+
 
 // =========================
 // ERROR HANDLING

@@ -507,11 +507,6 @@ export default async function agentRoutes(fastify, options) {
     );
 
 
-
-    //delete APi 
-    // =========================
-    // DELETE AGENT (PRODUCTION)
-    // =========================
     // =========================
     // DELETE AGENT (PRODUCTION GRADE)
     // =========================
@@ -593,6 +588,88 @@ export default async function agentRoutes(fastify, options) {
             }
         }
     );
+
+    fastify.get("/stats", {
+        preHandler: verifyToken
+    }, async (request, reply) => {
+
+        const userId = request.user.id;
+
+        try {
+            // ================= AGENTS =================
+            const agentsRes = await query(
+                "SELECT id FROM agents WHERE user_id = $1",
+                [userId]
+            );
+
+            const agentIds = agentsRes.rows.map(a => a.id);
+
+            if (!agentIds.length) {
+                return reply.send({
+                    success: true,
+                    stats: {
+                        totalRequests: 0,
+                        tokensUsed: 0,
+                        amountSpent: 0
+                    },
+                    agents: []
+                });
+            }
+
+            // ================= REQUESTS PER AGENT =================
+            const perAgentRes = await query(
+                `SELECT c.agent_id, COUNT(*) as requests
+             FROM messages m
+             JOIN conversations c ON m.conversation_id = c.id
+             WHERE c.agent_id = ANY($1)
+            AND m.role = 'user'
+             GROUP BY c.agent_id`,
+                [agentIds]
+            );
+
+            // map for quick lookup
+            const requestMap = {};
+            let totalRequests = 0;
+
+            perAgentRes.rows.forEach(r => {
+                const count = Number(r.requests);
+                requestMap[r.agent_id] = count;
+                totalRequests += count;
+            });
+
+            // ================= TOKENS =================
+            const tokensRes = await query(
+                `SELECT SUM(tokens_used) as total
+             FROM usage_logs
+             WHERE agent_id = ANY($1)`,
+                [agentIds]
+            );
+
+            const tokens = Number(tokensRes.rows[0]?.total || 0);
+            const amountSpent = tokens * 0.000002;
+
+            return reply.send({
+                success: true,
+                stats: {
+                    totalRequests,
+                    tokensUsed: tokens,
+                    amountSpent: Number(amountSpent.toFixed(4))
+                },
+                agents: agentIds.map(id => ({
+                    id,
+                    requests: requestMap[id] || 0
+                }))
+            });
+
+        } catch (err) {
+            console.error("Stats Error:", err);
+
+            return reply.status(500).send({
+                success: false,
+                message: "Internal Server Error"
+            });
+        }
+    });
 
 }
 
